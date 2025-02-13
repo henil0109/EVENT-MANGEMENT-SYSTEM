@@ -1,0 +1,193 @@
+import gradio as gr
+import pandas as pd
+import os
+import matplotlib.pyplot as plt
+
+# File to store event data
+file_path = "event_data.xlsx"
+
+# Initialize event data
+event_data = {}
+
+# Ensure the Excel file exists with proper headers
+if not os.path.exists(file_path):
+df = pd.DataFrame(columns=["Event Name", "Participant ID", "Participant Name", 
+                           "Gender", "Contact Number", "Department", "Attendance"])
+df.to_excel(file_path, index=False)
+
+# Load existing data from Excel
+df = pd.read_excel(file_path)
+if not df.empty:
+for _, row in df.iterrows():
+    event_name = row["Event Name"]
+    participant = (row["Participant ID"], row["Participant Name"], row["Gender"],
+                   row["Contact Number"], row["Department"], row["Attendance"])
+    if event_name in event_data:
+        event_data[event_name].append(participant)
+    else:
+        event_data[event_name] = [participant]
+
+# Function to save data to Excel
+def save_to_excel():
+data_list = []
+for event, participants in event_data.items():
+    for participant in participants:
+        data_list.append([event] + list(participant))
+
+df = pd.DataFrame(data_list, columns=["Event Name", "Participant ID", "Participant Name", 
+                                      "Gender", "Contact Number", "Department", "Attendance"])
+df.to_excel(file_path, index=False)
+
+# Function to add an event
+def add_event(event_name):
+if event_name in event_data:
+    return f"⚠️ Event '{event_name}' already exists!"
+event_data[event_name] = []
+save_to_excel()
+return f"✅ Event '{event_name}' has been added successfully!"
+
+# Function to add a participant
+def add_participant(event_name, participant_id, participant_name, gender, contact_number, department):
+if event_name not in event_data:
+    return f"⚠️ Event '{event_name}' does not exist!"
+for participant in event_data[event_name]:
+    if participant[0] == participant_id:
+        return f"⚠️ Participant ID '{participant_id}' already exists in '{event_name}'."
+event_data[event_name].append((participant_id, participant_name, gender, contact_number, department, "Not Attended"))
+save_to_excel()
+return f"✅ Participant '{participant_name}' added to '{event_name}'!"
+
+# Function to search for a participant by Name, ID, or Event
+def search_participant(search_query):
+search_query = str(search_query).strip().lower()
+results = []
+
+for event_name, participants in event_data.items():
+    for participant in participants:
+        participant_id, name, gender, contact, department, attendance = participant
+        if (search_query in str(participant_id).lower() or 
+            search_query in name.lower() or 
+            search_query in event_name.lower()):
+            results.append((event_name, participant_id, name, gender, contact, department, attendance))
+
+if not results:
+    return "⚠️ No matching participant found!"
+
+return "\n".join([f"🏅 Event: {res[0]} | 🆔 ID: {res[1]} | 🧑 Name: {res[2]} | 🚻 Gender: {res[3]} | 📞 Contact: {res[4]} | 🏛 Dept: {res[5]} | ✅ Attendance: {res[6]}" for res in results])
+
+
+# Function to mark attendance
+def mark_attendance(event_name, participant_id, status):
+if event_name not in event_data:
+    return f"⚠️ Event '{event_name}' does not exist!"
+for i, participant in enumerate(event_data[event_name]):
+    if participant[0] == participant_id:
+        event_data[event_name][i] = participant[:5] + (status,)
+        save_to_excel()
+        return f"✅ '{participant[1]}' marked as '{status}' in '{event_name}'."
+return f"⚠️ No participant with ID '{participant_id}' found in '{event_name}'."
+
+# Function to generate event summary
+def generate_summary():
+summary = "📊 **Event Summary:**\n"
+for event, participants in event_data.items():
+    summary += f"🏅 {event}: {len(participants)} participants\n"
+return summary
+
+# Function to generate charts
+def generate_charts():
+df = pd.read_excel(file_path)
+if df.empty:
+    return "⚠️ No data available for visualization."
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+
+# Event-wise participation
+event_counts = df["Event Name"].value_counts()
+event_counts.plot(kind="bar", ax=ax[0], color="skyblue")
+ax[0].set_title("🏅 Participants per Event")
+ax[0].set_ylabel("Number of Participants")
+
+# Attendance Pie Chart
+attendance_counts = df["Attendance"].value_counts()
+attendance_counts.plot(kind="pie", ax=ax[1], autopct="%1.1f%%", colors=["green", "red"])
+ax[1].set_title("✅ Attendance Ratio")
+
+plt.tight_layout()
+plt.savefig("chart.png")
+return "chart.png"
+
+# Gradio UI
+
+with gr.Blocks() as app:
+gr.Markdown("# 🏆 **College Sports Event Management System** 🏅")
+
+with gr.Tab("🏠 Home"):
+    gr.Markdown("## 🏀 Welcome to the Sports Event Management System! ⚽")
+    gr.Image("C:\\Users\\ASUS\\OneDrive\\Pictures\\CHARUSAT.png")
+    gr.Image("C:\\Users\\ASUS\\OneDrive\\Pictures\\CHARUSAT_NEW.6cad095d.png", width=300, height=200)
+
+with gr.Tab("📋 Add Event"):
+    event_input = gr.Textbox(label="🏅 Event Name", placeholder="Enter event name")
+    add_event_btn = gr.Button("➕ Add Event")
+    event_output = gr.Textbox(label="🔔 Output")
+    add_event_btn.click(add_event, inputs=event_input, outputs=event_output)
+
+with gr.Tab("👥 Add Participant"):
+    event_name_input = gr.Textbox(label="🏅 Event Name", placeholder="Enter event name")
+    participant_id_input = gr.Textbox(label="🆔 Participant ID", placeholder="Enter ID")
+    participant_name_input = gr.Textbox(label="🧑 Participant Name", placeholder="Enter name")
+    gender_input = gr.Radio(label="🚻 Gender", choices=["Male", "Female", "Other"])
+    contact_input = gr.Textbox(label="📞 Contact Number", placeholder="Enter number")
+    department_input = gr.Textbox(label="🏛 Department", placeholder="Enter department")
+    add_participant_btn = gr.Button("➕ Add Participant")
+    add_participant_output = gr.Textbox(label="🔔 Output")
+    add_participant_btn.click(
+        add_participant,
+        inputs=[event_name_input, participant_id_input, participant_name_input, gender_input, contact_input, department_input],
+        outputs=add_participant_output,
+    )
+
+with gr.Tab("🔍 Search & Attendance"):  # ✅ FIXED INDENTATION
+    # Search input field
+    search_input = gr.Textbox(label="🔎 Search by ID, Name, or Event", placeholder="Enter ID, Name, or Event")
+    search_btn = gr.Button("🔍 Search Participant")
+    search_output = gr.Textbox(label="🔔 Search Result", interactive=True)
+
+    # Button action for searching a participant
+    search_btn.click(search_participant, inputs=search_input, outputs=search_output)
+
+    # Attendance marking fields
+    mark_event_input = gr.Textbox(label="🏅 Event Name", placeholder="Enter event name")
+    mark_id_input = gr.Textbox(label="🆔 Participant ID", placeholder="Enter ID")
+    status_input = gr.Radio(label="✅ Attendance Status", choices=["Attended", "Not Attended"])
+    mark_btn = gr.Button("✔️ Mark Attendance")
+    mark_output = gr.Textbox(label="🔔 Output")
+
+    # Button action for marking attendance
+    mark_btn.click(mark_attendance, inputs=[mark_event_input, mark_id_input, status_input], outputs=mark_output)
+
+with gr.Tab("📊 Reports & Insights"):
+    summary_btn = gr.Button("📈 Generate Summary")
+    summary_output = gr.Textbox(label="📊 Summary")
+    summary_btn.click(generate_summary, outputs=summary_output)
+
+    chart_btn = gr.Button("📊 Generate Charts")
+    chart_output = gr.Image()
+    chart_btn.click(generate_charts, outputs=chart_output)
+
+# ✅ Footer properly placed inside Blocks
+gr.Markdown(
+    "<div style='text-align:center; padding:10px; font-size:14px; color:gray;'>"
+    "Made by <strong>HENIL PATEL</strong> </div>",
+    
+)
+
+
+app.launch()
+
+
+
+
+
+
